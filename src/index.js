@@ -1,3 +1,4 @@
+const _downloadFileName = 'fish-slap.png';
 const _fishCoordinates = {
   x: 0,
   y: 0
@@ -12,7 +13,7 @@ module.exports = class {
     this._uploader = null;
     this._fish = null;
     this._face = null;
-    this._saveButton = _createSaveButton();
+    this._saveButton = null;
 
     _createFish((image) => {
       this._fish = image;
@@ -24,6 +25,7 @@ module.exports = class {
   initialize() {
     this.createCanvas();
     this.createUploader();
+    this.createSaveButton();
 
     this._el.appendChild(this._canvas);
     this._el.appendChild(this._uploader);
@@ -34,7 +36,7 @@ module.exports = class {
 
   bindEvents() {
     this._uploader.addEventListener('change', this.handleUploadChange.bind(this));
-    this._saveButton.addEventListener('click', this.handleSaveClick);
+    this._saveButton.addEventListener('click', this.handleSaveClick.bind(this));
     this._canvas.addEventListener('mousedown', this.handleCanvasMouseDown.bind(this));
     this._canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));
     this._canvas.addEventListener('mouseup', this.handleCanvasMouseUp.bind(this));
@@ -75,7 +77,15 @@ module.exports = class {
   }
 
   handleSaveClick() {
-    console.log(this._canvas.toDataURL());
+    const linkElement = document.createElement('a');
+    linkElement.download = _downloadFileName;
+    linkElement.href = this._canvas.toDataURL();
+    linkElement.style.opacity = 0;
+    document.body.appendChild(linkElement);
+    linkElement.addEventListener('click', () => {
+      linkElement.parentElement.removeChild(linkElement);
+    });
+    linkElement.click();
   }
 
   createCanvas() {
@@ -88,6 +98,13 @@ module.exports = class {
   createUploader(){
     this._uploader = document.createElement('input');
     this._uploader.type = 'file';
+  }
+
+  createSaveButton(){
+    this._saveButton = document.createElement('button');
+    this._saveButton.type = 'button';
+    this._saveButton.innerHTML = 'Save Image';
+    return this._saveButton;
   }
 
   draw() {
@@ -121,11 +138,4 @@ function _readAsDataUrl(file, callback) {
   });
 
   reader.readAsDataURL(file);
-}
-
-function _createSaveButton() {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.innerHTML = 'Save Image';
-  return button;
 }
