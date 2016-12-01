@@ -1,10 +1,16 @@
 const _downloadFileName = 'fish-slap.png';
-const _fishCoordinates = {
-  x: 0,
-  y: 0
+const _fishObject = {
+  x: 20,
+  y: 20,
+  width: 100,
+  height: 100,
 };
 
 let _isMouseDown = false;
+let _canvasOffset = {
+  left: 0,
+  top: 0,
+};
 
 module.exports = class {
   constructor(el) {
@@ -27,7 +33,6 @@ module.exports = class {
     this.createUploader();
     this.createSaveButton();
 
-    this._el.appendChild(this._canvas);
     this._el.appendChild(this._uploader);
     this._el.appendChild(this._saveButton);
 
@@ -43,17 +48,16 @@ module.exports = class {
   }
 
   handleUploadChange(event) {
-    const self = this;
     let file = event.target.files[ 0 ];
 
     if (!file) {
       return;
     }
 
-    _readAsDataUrl(file, function (data) {
-      _createImageElement(data, function (image) {
-        self._face = image;
-        self.draw();
+    _readAsDataUrl(file, (data) => {
+      _createImageElement(data,  (image) => {
+        this._face = image;
+        this.draw();
       });
     });
   }
@@ -64,16 +68,19 @@ module.exports = class {
 
   handleCanvasMouseMove(event) {
     if (!_isMouseDown) return;
-    _fishCoordinates.x = event.clientX;
-    _fishCoordinates.y = event.clientY;
+    _fishObject.x = event.clientX;
+    _fishObject.y = event.clientY;
     this.draw();
   }
 
   handleCanvasMouseDown(event) {
-    _isMouseDown = true;
-    _fishCoordinates.x = event.clientX;
-    _fishCoordinates.y = event.clientY;
-    this.draw();
+    const { clientX, clientY } = event;
+    if(this.isInFish(clientX, clientY)){
+      _isMouseDown = true;
+      _fishObject.x = event.clientX;
+      _fishObject.y = event.clientY;
+      this.draw();
+    }
   }
 
   handleSaveClick() {
@@ -90,17 +97,20 @@ module.exports = class {
 
   createCanvas() {
     const parentDimensions = this._el.getBoundingClientRect();
-    this._canvas = document.createElement('canvas');
-    this._canvas.width = parentDimensions.width;
-    this._canvas.height = parentDimensions.height;
+    const canvas = this._canvas = document.createElement('canvas');
+    canvas.width = parentDimensions.width;
+    canvas.height = parentDimensions.height;
+    this._el.appendChild(canvas);
+    _canvasOffset.left = canvas.offsetLeft;
+    _canvasOffset.top = canvas.offsetTop;
   }
 
-  createUploader(){
+  createUploader() {
     this._uploader = document.createElement('input');
     this._uploader.type = 'file';
   }
 
-  createSaveButton(){
+  createSaveButton() {
     this._saveButton = document.createElement('button');
     this._saveButton.type = 'button';
     this._saveButton.innerHTML = 'Save Image';
@@ -111,7 +121,22 @@ module.exports = class {
     const context = this._canvas.getContext('2d');
     context.clearRect(0, 0, this._canvas.width, this._canvas.height);
     context.drawImage(this._face, 0, 0);
-    context.drawImage(this._fish, _fishCoordinates.x, _fishCoordinates.y, 100, 100);
+    context.drawImage(
+      this._fish,
+      _fishObject.x,
+      _fishObject.y,
+      100,
+      100,
+    );
+  }
+
+  isInFish(mouseX, mouseY){
+    const actualX = mouseX - _canvasOffset.left;
+    const actualY = mouseY - _canvasOffset.top;
+    return actualX > _fishObject.x &&
+      actualX < _fishObject.x + _fishObject.width &&
+      actualY > _fishObject.y &&
+      actualY < _fishObject.y + _fishObject.height;
   }
 };
 
