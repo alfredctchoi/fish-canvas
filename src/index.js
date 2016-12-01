@@ -1,92 +1,119 @@
-const _downloadFileName = 'fish-slap.png';
-const _fishObject = {
-  x: 20,
-  y: 20,
-  width: 100,
-  height: 100,
-};
+import * as mouseEventService from './services/mouse-events'
+import * as domService from './services/dom'
+import FishClass from './models/fish'
+import CanvasClass from './models/canvas'
+import Uploader from './models/uploader'
+import SaveButtonClass from './models/save'
 
-let _isMouseDown = false;
-let _canvasOffset = {
-  left: 0,
-  top: 0,
-};
+const _downloadFileName = 'fish-slap.png';
 
 module.exports = class {
   constructor(el) {
+    // bindings
+    this.draw = this.draw.bind(this);
+    this.drawFish = this.drawFish.bind(this);
+    this.drawFace = this.drawFace.bind(this);
+    this.uploadChange = this.uploadChange.bind(this);
+    this.handleCanvasMouseDown = this.handleCanvasMouseDown.bind(this);
+    this.handleCanvasMouseMove = this.handleCanvasMouseMove.bind(this);
+    this.handleCanvasMouseUp = this.handleCanvasMouseUp.bind(this);
+    this.handleSaveClick = this.handleSaveClick.bind(this);
+
+    // constants
+    const { width, height } = el.getBoundingClientRect();
+    const uploaderProps = {
+      onChange: this.uploadChange
+    };
+    const canvasProps = {
+      parent: el,
+      width,
+      height,
+      onMouseDown: this.handleCanvasMouseDown,
+      onMouseMove: this.handleCanvasMouseMove,
+      onMouseUp: this.handleCanvasMouseUp
+    };
+    const saveButtonProps = {
+      onClick: this.handleSaveClick
+    };
+
+    // private properties
     this._el = el;
-    this._canvas = null;
-    this._uploader = null;
-    this._fish = null;
+    this._canvas = new CanvasClass(canvasProps);
+    this._uploader = new Uploader(uploaderProps);
+    this._fish = new FishClass({ cb: this.draw });
     this._face = null;
-    this._saveButton = null;
+    this._saveButton = new SaveButtonClass(saveButtonProps);
+    this._isMouseDown = false;
 
-    _createFish((image) => {
-      this._fish = image;
-      this.initialize();
-    });
+    // add canvas
+    this._el.appendChild(this._uploader.el);
+    this._el.appendChild(this._saveButton.el);
   }
 
-
-  initialize() {
-    this.createCanvas();
-    this.createUploader();
-    this.createSaveButton();
-
-    this._el.appendChild(this._uploader);
-    this._el.appendChild(this._saveButton);
-
-    this.bindEvents();
+  get fish() {
+    return this._fish;
   }
 
-  bindEvents() {
-    this._uploader.addEventListener('change', this.handleUploadChange.bind(this));
-    this._saveButton.addEventListener('click', this.handleSaveClick.bind(this));
-    this._canvas.addEventListener('mousedown', this.handleCanvasMouseDown.bind(this));
-    this._canvas.addEventListener('mousemove', this.handleCanvasMouseMove.bind(this));
-    this._canvas.addEventListener('mouseup', this.handleCanvasMouseUp.bind(this));
-  }
-
-  handleUploadChange(event) {
-    let file = event.target.files[ 0 ];
-
-    if (!file) {
-      return;
-    }
-
-    _readAsDataUrl(file, (data) => {
-      _createImageElement(data,  (image) => {
-        this._face = image;
+  uploadChange(file) {
+    domService.createImage({
+      src: file,
+      cb: (face) => {
+        this._face = face;
         this.draw();
-      });
-    });
+      }
+    })
   }
 
-  handleCanvasMouseUp(event) {
-    _isMouseDown = false;
+  drawFish() {
+    const {
+      image,
+      x,
+      y,
+      width,
+      height,
+    } = this.fish;
+
+    this._canvas.context2d.drawImage(image, x, y, width, height);
+  }
+
+  drawFace() {
+    if (!this._face) return;
+    this._canvas.context2d.drawImage(this._face, 0, 0);
+  }
+
+  draw() {
+    this._canvas.clear();
+    this.drawFace();
+    this.drawFish();
+  }
+
+  handleCanvasMouseUp() {
+    this._isMouseDown = false;
   }
 
   handleCanvasMouseMove(event) {
-    if (!_isMouseDown) return;
-    _fishObject.x = event.clientX;
-    _fishObject.y = event.clientY;
+    if (!this._isMouseDown) return;
+    const { clientX, clientY } = event;
+    const { x, y } = mouseEventService.getCanvasMousePosition({
+      clientX,
+      clientY,
+      canvas: this._canvas
+    });
+    this._fish.move(x, y);
     this.draw();
   }
 
   handleCanvasMouseDown(event) {
     const { clientX, clientY } = event;
-    if(this.isInFish(clientX, clientY)){
-      _isMouseDown = true;
-      _fishObject.x = event.clientX;
-      _fishObject.y = event.clientY;
-      this.draw();
-    }
+    const { x, y } = mouseEventService.getCanvasMousePosition({ clientX, clientY, canvas: this._canvas });
+    if (!mouseEventService.isFishClicked({ x, y, fish: this._fish })) return;
+    this._isMouseDown = true;
   }
 
   handleSaveClick() {
     const linkElement = document.createElement('a');
     linkElement.download = _downloadFileName;
-    linkElement.href = this._canvas.toDataURL();
+    linkElement.href = this._canvas.el.toDataURL();
     linkElement.style.opacity = 0;
     document.body.appendChild(linkElement);
     linkElement.addEventListener('click', () => {
@@ -94,73 +121,4 @@ module.exports = class {
     });
     linkElement.click();
   }
-
-  createCanvas() {
-    const parentDimensions = this._el.getBoundingClientRect();
-    const canvas = this._canvas = document.createElement('canvas');
-    canvas.width = parentDimensions.width;
-    canvas.height = parentDimensions.height;
-    this._el.appendChild(canvas);
-    _canvasOffset.left = canvas.offsetLeft;
-    _canvasOffset.top = canvas.offsetTop;
-  }
-
-  createUploader() {
-    this._uploader = document.createElement('input');
-    this._uploader.type = 'file';
-  }
-
-  createSaveButton() {
-    this._saveButton = document.createElement('button');
-    this._saveButton.type = 'button';
-    this._saveButton.innerHTML = 'Save Image';
-    return this._saveButton;
-  }
-
-  draw() {
-    const context = this._canvas.getContext('2d');
-    context.clearRect(0, 0, this._canvas.width, this._canvas.height);
-    context.drawImage(this._face, 0, 0);
-    context.drawImage(
-      this._fish,
-      _fishObject.x,
-      _fishObject.y,
-      100,
-      100,
-    );
-  }
-
-  isInFish(mouseX, mouseY){
-    const actualX = mouseX - _canvasOffset.left;
-    const actualY = mouseY - _canvasOffset.top;
-    return actualX > _fishObject.x &&
-      actualX < _fishObject.x + _fishObject.width &&
-      actualY > _fishObject.y &&
-      actualY < _fishObject.y + _fishObject.height;
-  }
 };
-
-// private functions
-
-function _createFish(callback) {
-  _createImageElement('assets/fish.png', function (image) {
-    callback(image);
-  });
-}
-
-function _createImageElement(src, callback) {
-  const image = new Image();
-  image.addEventListener('load', function () {
-    callback(image)
-  });
-  image.src = src;
-}
-
-function _readAsDataUrl(file, callback) {
-  const reader = new FileReader();
-  reader.addEventListener('load', function () {
-    callback(reader.result)
-  });
-
-  reader.readAsDataURL(file);
-}
