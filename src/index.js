@@ -44,14 +44,11 @@ module.exports = class {
     this._face = null;
     this._saveButton = new SaveButtonClass(saveButtonProps);
     this._isMouseDown = false;
+    this._resizeProperty = null;
 
     // add canvas
     this._el.appendChild(this._uploader.el);
     this._el.appendChild(this._saveButton.el);
-  }
-
-  get fish() {
-    return this._fish;
   }
 
   uploadChange(file) {
@@ -71,9 +68,22 @@ module.exports = class {
       y,
       width,
       height,
-    } = this.fish;
+    } = this._fish;
+    const ctx = this._canvas.context2d;
 
-    this._canvas.context2d.drawImage(image, x, y, width, height);
+    ctx.drawImage(image, x, y, width, height);
+
+    // if (this._clickCount >= 1){
+    //   ctx.beginPath();
+    //   ctx.moveTo(x, y);
+    //   ctx.lineTo(x + width, y);
+    //   ctx.lineTo(x + width, y + height);
+    //   ctx.lineTo(x, y + height);
+    //   ctx.closePath();
+    //   ctx.stroke();
+    // }
+
+    this._fish.drawAnchors(ctx);
   }
 
   drawFace() {
@@ -89,25 +99,81 @@ module.exports = class {
 
   handleCanvasMouseUp() {
     this._isMouseDown = false;
+    this._resizeProperty = null;
   }
 
   handleCanvasMouseMove(event) {
-    if (!this._isMouseDown) return;
     const { clientX, clientY } = event;
     const { x, y } = mouseEventService.getCanvasMousePosition({
       clientX,
       clientY,
       canvas: this._canvas
     });
-    this._fish.move(x, y);
+
+    if (this._resizeProperty !== null) {
+      let width;
+      let height;
+
+      switch (this._resizeProperty) {
+        case 'topLeft':
+          width = (this._fish.x + this._fish.width) - x;
+          height = (this._fish.y + this._fish.height) - y;
+          this._fish.resize({ x, y, width, height });
+          break;
+        case 'topRight':
+          width = x - this._fish.x;
+          height = (this._fish.y + this._fish.height) - y;
+          this._fish.resize({
+            x: this._fish.x,
+            y: y,
+            width,
+            height,
+          });
+          break;
+        case 'bottomRight':
+          width = x - this._fish.x;
+          height = y - this._fish.y ;
+          this._fish.resize({
+            x: this._fish.x,
+            y: this._fish.y,
+            width,
+            height,
+          });
+          break;
+        case 'bottomLeft':
+          width = (this._fish.x + this._fish.width) - x;
+          height = y - this._fish.y;
+          this._fish.resize({
+            x,
+            y: this._fish.y,
+            width,
+            height,
+          });
+          break;
+      }
+    }
+
+    if (this._isMouseDown) {
+      this._fish.move(x, y);
+    }
+
     this.draw();
   }
 
   handleCanvasMouseDown(event) {
     const { clientX, clientY } = event;
-    const { x, y } = mouseEventService.getCanvasMousePosition({ clientX, clientY, canvas: this._canvas });
-    if (!mouseEventService.isFishClicked({ x, y, fish: this._fish })) return;
-    this._isMouseDown = true;
+    const { x, y } = mouseEventService.getCanvasMousePosition({
+      clientX,
+      clientY,
+      canvas: this._canvas
+    });
+
+    this._resizeProperty = mouseEventService.getResizeProp({ x, y, fish: this._fish });
+    const isFish = mouseEventService.isFishClicked({ x, y, fish: this._fish });
+
+    if (isFish) {
+      this._isMouseDown = true;
+    }
   }
 
   handleSaveClick() {
