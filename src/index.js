@@ -1,212 +1,294 @@
-import * as mouseEventService from './services/mouse-events'
-import * as domService from './services/dom'
-import FishClass from './models/fish'
-import CanvasClass from './models/canvas'
-import Uploader from './models/uploader'
-import SaveButtonClass from './models/save'
+import fishImage from './assets/fish'
 
+const anchorWidth = 10;
+const halfAnchorWidth = anchorWidth / 2;
 const _downloadFileName = 'fish-slap.png';
 
 module.exports = class {
   constructor(el) {
     // bindings
+    this.init = this.init.bind(this);
     this.draw = this.draw.bind(this);
-    this.drawFish = this.drawFish.bind(this);
-    this.drawFace = this.drawFace.bind(this);
-    this.uploadChange = this.uploadChange.bind(this);
-    this.handleCanvasMouseDown = this.handleCanvasMouseDown.bind(this);
-    this.handleCanvasMouseMove = this.handleCanvasMouseMove.bind(this);
-    this.handleCanvasMouseUp = this.handleCanvasMouseUp.bind(this);
-    this.handleSaveClick = this.handleSaveClick.bind(this);
+    this.addResizeAnchor = this.addResizeAnchor.bind(this);
+    this.onMouseDown = this.onMouseDown.bind(this);
+    this.onMouseUp = this.onMouseUp.bind(this);
+    this.onMouseMove = this.onMouseMove.bind(this);
+    this.onFileChange = this.onFileChange.bind(this);
+    this.onSaveClick = this.onSaveClick.bind(this);
 
-    // constants
-    const { width, height } = el.getBoundingClientRect();
-    const uploaderProps = {
-      onChange: this.uploadChange
-    };
-    const canvasProps = {
-      parent: el,
-      width,
-      height,
-      onMouseDown: this.handleCanvasMouseDown,
-      onMouseMove: this.handleCanvasMouseMove,
-      onMouseUp: this.handleCanvasMouseUp
-    };
-    const saveButtonProps = {
-      onClick: this.handleSaveClick
-    };
-
-    // private properties
+    // dom stuff
     this._el = el;
-    this._canvas = new CanvasClass(canvasProps);
-    this._uploader = new Uploader(uploaderProps);
-    this._fish = new FishClass({ cb: this.draw });
-    this._face = null;
-    this._saveButton = new SaveButtonClass(saveButtonProps);
+    this._canvas = document.createElement('canvas');
+    this._ctx = this._canvas.getContext('2d');
+    this._background = null;
+    this._offsetLeft = null; // set after mount
+    this._offsetTop = null; // set after mount
+    this._fileInput = document.createElement('input');
+    this._saveButton = document.createElement('button');
+    this._saveButton.innerText = 'Save';
+
+    this._fileInput.type = 'file';
+
+    // init canvas
+    const elRect = el.getBoundingClientRect();
+    this._canvas.width = elRect.width;
+    this._canvas.height = elRect.height;
+    this._canvas.style.border = '1px solid black';
+
+    // flags
     this._isMouseDown = false;
-    this._resizeProperty = null;
     this._isSelected = false;
+    this._resizeProp = null;
+    this._isMoving = false;
+    this._isImageSelected = false;
+    this._selectedAnchor = null;
     this._isRotating = false;
+    this._showAnchors = false;
 
-    // add canvas
-    this._el.appendChild(this._uploader.el);
-    this._el.appendChild(this._saveButton.el);
+    // variables
+    this._image = null;
+    this._width = 100;
+    this._height = 100;
+    this._clientX = 0;
+    this._clientY = 0;
+    this._right = 0;
+    this._bottom = 0;
+    this._x = -this._width / 2;
+    this._y = -this._height / 2;
+    this._r = 0 * Math.PI / 180;
+    this._translation = [ this._width / 2, this._height / 2 ];
+    this._oldWidth = this._width;
+    this._oldHeight = this._height;
+
+    this.init();
   }
 
-  uploadChange(file) {
-    domService.createImage({
-      src: file,
-      cb: (face) => {
-        this._face = face;
-        this.draw();
-      }
-    })
-  }
+  init() {
+    this._el.appendChild(this._canvas);
+    this._el.appendChild(this._fileInput);
+    this._el.appendChild(this._saveButton);
+    this._offsetLeft = this._canvas.offsetLeft;
+    this._offsetTop = this._canvas.offsetTop;
 
-  drawFish() {
-    const {
-      image,
-      width,
-      height,
-    } = this._fish;
-    const ctx = this._canvas.context2d;
-    const { x: cx, y: cy } = this._fish.center;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(this._fish.rotation);
-    ctx.drawImage(image, -width / 2, -height / 2, width, height);
-    ctx.restore();
-
-    if ( this._isSelected ) {
-      this._fish.drawAnchors(ctx);
-    }
-  }
-
-  drawFace() {
-    if ( !this._face ) return;
-    this._canvas.context2d.drawImage(this._face, 0, 0);
+    this._saveButton.addEventListener('click', this.onSaveClick);
+    this._fileInput.addEventListener('change', this.onFileChange);
+    this._canvas.addEventListener('mousedown', this.onMouseDown);
+    this._canvas.addEventListener('mouseup', this.onMouseUp);
+    this._canvas.addEventListener('mousemove', this.onMouseMove);
+    this._image = new Image();
+    this._image.addEventListener('load', () => {
+      setInterval(this.draw, 20);
+    });
+    this._image.src = fishImage;
   }
 
   draw() {
-    this._canvas.clear();
-    this.drawFace();
-    this.drawFish();
+    this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+
+    // draw bg
+    if ( this._background !== null ) {
+      this._ctx.drawImage(this._background, 0, 0, this._canvas.width, this._canvas.height);
+    }
+
+    this._ctx.save();
+    this._ctx.translate(this._translation[ 0 ], this._translation[ 1 ]);
+    this._ctx.rotate(this._r);
+    this._ctx.fillRect(-3, -3, 6, 6);
+
+    // draw rectangle and check if the mouse is within area
+    this._ctx.drawImage(this._image, this._x, this._y, this._width, this._height);
+    this._ctx.beginPath();
+    this._ctx.rect(this._x, this._y, this._width, this._height);
+    this._ctx.closePath();
+    // this._ctx.strokeStyle = 'red';
+    // this._ctx.stroke();
+    this._isSelected = this._ctx.isPointInPath(this._clientX, this._clientY);
+
+    // // add resize anchors
+    if (this._showAnchors) {
+      this._resizeProp = null;
+      this.addResizeAnchor(this._x, this._y);
+      if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
+        this._resizeProp = 'topLeft';
+      this.addResizeAnchor(this._x + this._width, this._y);
+      if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
+        this._resizeProp = 'topRight';
+      this.addResizeAnchor(this._x, this._y + this._height);
+      if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
+        this._resizeProp = 'bottomLeft';
+      this.addResizeAnchor(this._x + this._width, this._y + this._height);
+      if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
+        this._resizeProp = 'bottomRight';
+      this.addResizeAnchor(this._x + this._width / 2, this._y + this._height);
+      if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
+        this._resizeProp = 'rotate';
+    }
+
+    this._ctx.restore();
   }
 
-  handleCanvasMouseUp() {
+  addResizeAnchor(aX, aY) {
+    this._ctx.beginPath();
+    this._ctx.rect(aX - halfAnchorWidth, aY - halfAnchorWidth, anchorWidth, anchorWidth);
+    this._ctx.closePath();
+    this._ctx.fillStyle = 'black';
+    this._ctx.fill();
+  }
+
+  onMouseDown() {
+    this._isMouseDown = true;
+    this._isImageSelected = this._isSelected && this._resizeProp === null;
+    this._selectedAnchor = this._resizeProp && !this._isImageSelected ? this._resizeProp : null;
+    this._isRotating = this._resizeProp && this._resizeProp === 'rotate';
+    this._showAnchors = (this._isImageSelected || this._selectedAnchor !== null);
+  }
+
+  onMouseUp() {
     this._isMouseDown = false;
-    this._resizeProperty = null;
-    this._isRotating = false;
+    this._isMoving = false;
+    this._isSelected = false;
+    this._resizeProp = null;
+    this._isImageSelected = false;
+    this._selectedAnchor = null;
   }
 
-  handleCanvasMouseMove(event) {
-    // do nothing if fish is not selected
-    if ( !this._isSelected ) return;
+  onMouseMove() {
+    this._clientX = event.clientX - this._offsetLeft;
+    this._clientY = event.clientY - this._offsetTop;
+    const translateClientX = this._clientX - this._translation[ 0 ];
+    const translateClientY = this._clientY - this._translation[ 1 ];
+    const translatedX = translateClientX * Math.cos(-this._r) - translateClientY * Math.sin(-this._r);
+    const translatedY = translateClientX * Math.sin(-this._r) + translateClientY * Math.cos(-this._r);
 
-    const { clientX, clientY } = event;
+    const maxRight = this._right - 50;
+    const maxBottom = this._bottom - 50;
+    const maxLeft = this._x + 50;
+    const maxTop = this._y + 50;
+    let dW;
+    let dH;
 
-    // get the real mouse position including offset when canvas is clicked
-    const { x, y } = mouseEventService.getCanvasMousePosition({
-      clientX,
-      clientY,
-      canvas: this._canvas
-    });
+    if ( !this._isMouseDown ) return;
 
-    if ( this._resizeProperty !== null ) {
-      let width;
-      let height;
+    if (this._isRotating){
+      const cx = this._translation[0];
+      const cy = this._translation[1];
+      const dx = this._clientX - cx;
+      const dy = this._clientY - cy;
+      this._r = Math.atan2(dy, dx) - 1.5708;
+      return;
+    }
 
-      switch ( this._resizeProperty ) {
+    if ( this._selectedAnchor !== null ) {
+      switch ( this._selectedAnchor ) {
         case 'topLeft':
-          width = (this._fish.x + this._fish.width) - x;
-          height = (this._fish.y + this._fish.height) - y;
-          this._fish.resize({ x, y, width, height });
+          this._x = translatedX > maxRight ? maxRight : translatedX;
+          this._y = translatedY > maxBottom ? maxBottom : translatedY;
+          this._width = this._right - this._x;
+          this._height = this._bottom - this._y;
+
+          dW = (this._width - this._oldWidth) / 2;
+          dH = (this._height - this._oldHeight) / 2;
+
+          this._translation[ 0 ] = this._translation[ 0 ] + (-1 * dW);
+          this._translation[ 1 ] = this._translation[ 1 ] + (-1 * dH);
+
+          // remove the difference from x and y values
+          this._x += dW;
+          this._y += dH;
           break;
         case 'topRight':
-          width = x - this._fish.x;
-          height = (this._fish.y + this._fish.height) - y;
-          this._fish.resize({
-            x: this._fish.x,
-            y: y,
-            width,
-            height,
-          });
-          break;
-        case 'bottomRight':
-          width = x - this._fish.x;
-          height = y - this._fish.y;
-          this._fish.resize({
-            x: this._fish.x,
-            y: this._fish.y,
-            width,
-            height,
-          });
+          this._y = translatedY > maxBottom ? maxBottom : translatedY;
+          this._width = translatedX - this._x < maxLeft ? maxLeft : translatedX - this._x;
+          this._height = this._bottom - this._y;
+
+          dW = (this._width - this._oldWidth) / 2;
+          dH = (this._height - this._oldHeight) / 2;
+
+          // adds the difference to recenter box
+          this._translation[ 0 ] = this._translation[ 0 ] + dW;
+          this._translation[ 1 ] = this._translation[ 1 ] + (-1 * dH);
+
+          // remove the difference from x and y values
+          this._x -= dW;
+          this._y += dH;
           break;
         case 'bottomLeft':
-          width = (this._fish.x + this._fish.width) - x;
-          height = y - this._fish.y;
-          this._fish.resize({
-            x,
-            y: this._fish.y,
-            width,
-            height,
-          });
+          this._x = translatedX > maxRight ? maxRight : translatedX;
+          this._width = this._right - this._x;
+          this._height = translatedY - this._y < maxTop ? maxTop : translatedY - this._y;
+
+          dW = (this._width - this._oldWidth) / 2;
+          dH = (this._height - this._oldHeight) / 2;
+
+          this._translation[ 0 ] = this._translation[ 0 ] + (-1 * dW);
+          this._translation[ 1 ] = this._translation[ 1 ] + dH;
+
+          // remove the difference from x and y values
+          this._x += dW;
+          this._y -= dH;
+          break;
+        case 'bottomRight':
+          this._width = translatedX - this._x < maxLeft ? maxLeft : translatedX - this._x;
+          this._height = translatedY - this._y < maxTop ? maxTop : translatedY - this._y;
+
+          dW = (this._width - this._oldWidth) / 2;
+          dH = (this._height - this._oldHeight) / 2;
+
+          this._translation[ 0 ] = this._translation[ 0 ] + dW;
+          this._translation[ 1 ] = this._translation[ 1 ] + dH;
+
+          // remove the difference from x and y values
+          this._x -= dW;
+          this._y -= dH;
           break;
       }
-      this.draw();
+
+      this._right = this._x + this._width;
+      this._bottom = this._y + this._height;
+      this._oldWidth = this._width;
+      this._oldHeight = this._height;
       return;
     }
 
-    if ( this._isRotating ) {
-      const { x: cx, y: cy } = this._fish.center;
-      const dx = x - cx;
-      const dy = y - cy;
-      const angle = Math.atan2(dy, dx);
-      this._fish.rotate(angle - 1.5);  // magical number of radians
-      this.draw();
-      return;
+    if ( this._isImageSelected ) {
+      this._isMoving = true;
+      this._translation = [ this._clientX, this._clientY ];
+      this._x = translateClientX * Math.cos(-this._r) - translateClientY * Math.sin(-this._r) - (this._width / 2);
+      this._y = translateClientX * Math.sin(-this._r) + translateClientY * Math.cos(-this._r) - (this._height / 2);
+      this._right = this._x + this._width;
+      this._bottom = this._y + this._height;
     }
-
-    if ( this._isMouseDown ) {
-      this._fish.move(x, y);
-    }
-
-    this.draw();
   }
 
-  handleCanvasMouseDown(event) {
-    const { _fish: fish } = this;
-    const { clientX, clientY } = event;
-    const { x, y } = mouseEventService.getCanvasMousePosition({
-      clientX,
-      clientY,
-      canvas: this._canvas
+  onFileChange(event) {
+    const { files } = event.target;
+    if ( !files || files.length === 0 ) return;
+
+    const fileReader = new FileReader();
+
+    fileReader.addEventListener('load', () => {
+      const bg = new Image();
+      bg.addEventListener('load', () => {
+        this._background = bg;
+      });
+      bg.src = fileReader.result;
     });
 
-    this._resizeProperty = mouseEventService.getResizeProp({ x, y, fish });
-    const isFish = mouseEventService.isFishClicked({ x, y, fish });
-    this._isRotating = mouseEventService.isRotateClicked({ x, y, fish });
-
-    if ( isFish || this._resizeProperty !== null || this._isRotating ) {
-      this._isMouseDown = true;
-      this._isSelected = true;
-    } else {
-      this._isSelected = false;
-    }
-
-    this.draw();
+    fileReader.readAsDataURL(files[0]);
   }
 
-  handleSaveClick() {
-    const linkElement = document.createElement('a');
-    linkElement.download = _downloadFileName;
-    linkElement.href = this._canvas.el.toDataURL();
-    linkElement.style.opacity = 0;
-    document.body.appendChild(linkElement);
-    linkElement.addEventListener('click', () => {
-      linkElement.parentElement.removeChild(linkElement);
-    });
-    linkElement.click();
+  onSaveClick(){
+    this._showAnchors = false;
+    setTimeout(() => {
+      const linkElement = document.createElement('a');
+      linkElement.download = _downloadFileName;
+      linkElement.href = this._canvas.toDataURL();
+      linkElement.style.opacity = 0;
+      document.body.appendChild(linkElement);
+      linkElement.addEventListener('click', () => {
+        linkElement.parentElement.removeChild(linkElement);
+      });
+      linkElement.click();
+    }, 20);
   }
 };
