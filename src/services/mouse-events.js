@@ -14,14 +14,27 @@ export const isFishClicked = ({ x, y, fish }) => {
 };
 
 export const getResizeProp = ({ x, y, fish }) => {
-  const { anchors } = fish;
-  for (let anchor in anchors) {
-    if (!anchors.hasOwnProperty(anchor)) continue;
-    const { top, left, right, bottom } = anchors[ anchor ];
+  const { resizeAnchors } = fish;
+  for (let anchor in resizeAnchors) {
+    if (!resizeAnchors.hasOwnProperty(anchor)) continue;
+    const { top, left, right, bottom } = resizeAnchors[ anchor ];
     if (x > left && x < right && y > top && y < bottom) {
       return anchor;
     }
   }
 
   return null;
+};
+
+export const isRotateClicked = ({ x, y, fish }) => {
+  const { rotateAnchors } = fish;
+  for (let anchor in rotateAnchors) {
+    if (!rotateAnchors.hasOwnProperty(anchor)) continue;
+    const { top, left, right, bottom } = rotateAnchors[ anchor ];
+    if (x > left && x < right && y > top && y < bottom) {
+      return true;
+    }
+  }
+
+  return false;
 };

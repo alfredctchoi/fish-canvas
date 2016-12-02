@@ -46,6 +46,7 @@ module.exports = class {
     this._isMouseDown = false;
     this._resizeProperty = null;
     this._isSelected = false;
+    this._isRotating = false;
 
     // add canvas
     this._el.appendChild(this._uploader.el);
@@ -65,32 +66,25 @@ module.exports = class {
   drawFish() {
     const {
       image,
-      x,
-      y,
       width,
       height,
     } = this._fish;
     const ctx = this._canvas.context2d;
+    const { x: cx, y: cy } = this._fish.center;
 
-    ctx.drawImage(image, x, y, width, height);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(this._fish.rotation);
+    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    ctx.restore();
 
-    // if (this._clickCount >= 1){
-    //   ctx.beginPath();
-    //   ctx.moveTo(x, y);
-    //   ctx.lineTo(x + width, y);
-    //   ctx.lineTo(x + width, y + height);
-    //   ctx.lineTo(x, y + height);
-    //   ctx.closePath();
-    //   ctx.stroke();
-    // }
-
-    if (this._isSelected) {
+    if ( this._isSelected ) {
       this._fish.drawAnchors(ctx);
     }
   }
 
   drawFace() {
-    if (!this._face) return;
+    if ( !this._face ) return;
     this._canvas.context2d.drawImage(this._face, 0, 0);
   }
 
@@ -103,11 +97,12 @@ module.exports = class {
   handleCanvasMouseUp() {
     this._isMouseDown = false;
     this._resizeProperty = null;
+    this._isRotating = false;
   }
 
   handleCanvasMouseMove(event) {
     // do nothing if fish is not selected
-    if (!this._isSelected) return;
+    if ( !this._isSelected ) return;
 
     const { clientX, clientY } = event;
 
@@ -118,11 +113,11 @@ module.exports = class {
       canvas: this._canvas
     });
 
-    if (this._resizeProperty !== null) {
+    if ( this._resizeProperty !== null ) {
       let width;
       let height;
 
-      switch (this._resizeProperty) {
+      switch ( this._resizeProperty ) {
         case 'topLeft':
           width = (this._fish.x + this._fish.width) - x;
           height = (this._fish.y + this._fish.height) - y;
@@ -140,7 +135,7 @@ module.exports = class {
           break;
         case 'bottomRight':
           width = x - this._fish.x;
-          height = y - this._fish.y ;
+          height = y - this._fish.y;
           this._fish.resize({
             x: this._fish.x,
             y: this._fish.y,
@@ -163,7 +158,17 @@ module.exports = class {
       return;
     }
 
-    if (this._isMouseDown) {
+    if ( this._isRotating ) {
+      const { x: cx, y: cy } = this._canvas.center;
+      const dx = x - cx;
+      const dy = y - cy;
+      const angle = Math.atan2(dy, dx);
+      this._fish.rotate(angle);
+      this.draw();
+      return;
+    }
+
+    if ( this._isMouseDown ) {
       this._fish.move(x, y);
     }
 
@@ -171,6 +176,7 @@ module.exports = class {
   }
 
   handleCanvasMouseDown(event) {
+    const { _fish: fish } = this;
     const { clientX, clientY } = event;
     const { x, y } = mouseEventService.getCanvasMousePosition({
       clientX,
@@ -178,10 +184,11 @@ module.exports = class {
       canvas: this._canvas
     });
 
-    this._resizeProperty = mouseEventService.getResizeProp({ x, y, fish: this._fish });
-    const isFish = mouseEventService.isFishClicked({ x, y, fish: this._fish });
+    this._resizeProperty = mouseEventService.getResizeProp({ x, y, fish });
+    const isFish = mouseEventService.isFishClicked({ x, y, fish });
+    this._isRotating = mouseEventService.isRotateClicked({ x, y, fish });
 
-    if (isFish || this._resizeProperty !== null) {
+    if ( isFish || this._resizeProperty !== null || this._isRotating ) {
       this._isMouseDown = true;
       this._isSelected = true;
     } else {

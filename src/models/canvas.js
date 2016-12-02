@@ -16,11 +16,11 @@ export default class {
     this._element.addEventListener('mousemove', onMouseMove);
   }
 
-  get offsetLeft(){
+  get offsetLeft() {
     return this._offsetLeft;
   }
 
-  get offsetTop(){
+  get offsetTop() {
     return this._offsetTop;
   }
 
@@ -32,7 +32,14 @@ export default class {
     return this._element.getContext('2d');
   }
 
-  clear(){
+  get center() {
+    return {
+      x: this.el.width / 2,
+      y: this.el.height / 2
+    }
+  }
+
+  clear() {
     this.context2d.clearRect(0, 0, this.el.width, this.el.height);
   }
 }
