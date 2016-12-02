@@ -159,11 +159,11 @@ module.exports = class {
     }
 
     if ( this._isRotating ) {
-      const { x: cx, y: cy } = this._canvas.center;
+      const { x: cx, y: cy } = this._fish.center;
       const dx = x - cx;
       const dy = y - cy;
       const angle = Math.atan2(dy, dx);
-      this._fish.rotate(angle);
+      this._fish.rotate(angle - 1.5);  // magical number of radians
       this.draw();
       return;
     }
