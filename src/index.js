@@ -45,6 +45,7 @@ module.exports = class {
     this._saveButton = new SaveButtonClass(saveButtonProps);
     this._isMouseDown = false;
     this._resizeProperty = null;
+    this._isSelected = false;
 
     // add canvas
     this._el.appendChild(this._uploader.el);
@@ -83,7 +84,9 @@ module.exports = class {
     //   ctx.stroke();
     // }
 
-    this._fish.drawAnchors(ctx);
+    if (this._isSelected) {
+      this._fish.drawAnchors(ctx);
+    }
   }
 
   drawFace() {
@@ -103,7 +106,12 @@ module.exports = class {
   }
 
   handleCanvasMouseMove(event) {
+    // do nothing if fish is not selected
+    if (!this._isSelected) return;
+
     const { clientX, clientY } = event;
+
+    // get the real mouse position including offset when canvas is clicked
     const { x, y } = mouseEventService.getCanvasMousePosition({
       clientX,
       clientY,
@@ -151,6 +159,8 @@ module.exports = class {
           });
           break;
       }
+      this.draw();
+      return;
     }
 
     if (this._isMouseDown) {
@@ -171,9 +181,14 @@ module.exports = class {
     this._resizeProperty = mouseEventService.getResizeProp({ x, y, fish: this._fish });
     const isFish = mouseEventService.isFishClicked({ x, y, fish: this._fish });
 
-    if (isFish) {
+    if (isFish || this._resizeProperty !== null) {
       this._isMouseDown = true;
+      this._isSelected = true;
+    } else {
+      this._isSelected = false;
     }
+
+    this.draw();
   }
 
   handleSaveClick() {
