@@ -39,7 +39,6 @@ module.exports = class {
     this._isMouseDown = false;
     this._isSelected = false;
     this._resizeProp = null;
-    this._isMoving = false;
     this._isImageSelected = false;
     this._selectedAnchor = null;
     this._isRotating = false;
@@ -93,19 +92,16 @@ module.exports = class {
     this._ctx.save();
     this._ctx.translate(this._translation[ 0 ], this._translation[ 1 ]);
     this._ctx.rotate(this._r);
-    this._ctx.fillRect(-3, -3, 6, 6);
 
     // draw rectangle and check if the mouse is within area
     this._ctx.drawImage(this._image, this._x, this._y, this._width, this._height);
     this._ctx.beginPath();
     this._ctx.rect(this._x, this._y, this._width, this._height);
     this._ctx.closePath();
-    // this._ctx.strokeStyle = 'red';
-    // this._ctx.stroke();
     this._isSelected = this._ctx.isPointInPath(this._clientX, this._clientY);
 
     // // add resize anchors
-    if (this._showAnchors) {
+    if ( this._showAnchors ) {
       this._resizeProp = null;
       this.addResizeAnchor(this._x, this._y);
       if ( this._ctx.isPointInPath(this._clientX, this._clientY) )
@@ -124,6 +120,7 @@ module.exports = class {
         this._resizeProp = 'rotate';
     }
 
+    // this._ctx.fillRect(-3, -3, 6, 6);
     this._ctx.restore();
   }
 
@@ -145,20 +142,26 @@ module.exports = class {
 
   onMouseUp() {
     this._isMouseDown = false;
-    this._isMoving = false;
     this._isSelected = false;
     this._resizeProp = null;
     this._isImageSelected = false;
     this._selectedAnchor = null;
   }
 
-  onMouseMove() {
+  onMouseMove(event) {
     this._clientX = event.clientX - this._offsetLeft;
     this._clientY = event.clientY - this._offsetTop;
-    const translateClientX = this._clientX - this._translation[ 0 ];
-    const translateClientY = this._clientY - this._translation[ 1 ];
-    const translatedX = translateClientX * Math.cos(-this._r) - translateClientY * Math.sin(-this._r);
-    const translatedY = translateClientX * Math.sin(-this._r) + translateClientY * Math.cos(-this._r);
+    const {
+      translatedX,
+      translatedY
+    } = getRotatedCoordinates(
+      event,
+      this._offsetLeft,
+      this._offsetTop,
+      this._translation[ 0 ],
+      this._translation[ 1 ],
+      this._r
+    );
 
     const maxRight = this._right - 50;
     const maxBottom = this._bottom - 50;
@@ -169,9 +172,9 @@ module.exports = class {
 
     if ( !this._isMouseDown ) return;
 
-    if (this._isRotating){
-      const cx = this._translation[0];
-      const cy = this._translation[1];
+    if ( this._isRotating ) {
+      const cx = this._translation[ 0 ];
+      const cy = this._translation[ 1 ];
       const dx = this._clientX - cx;
       const dy = this._clientY - cy;
       this._r = Math.atan2(dy, dx) - 1.5708;
@@ -189,9 +192,6 @@ module.exports = class {
           dW = (this._width - this._oldWidth) / 2;
           dH = (this._height - this._oldHeight) / 2;
 
-          this._translation[ 0 ] = this._translation[ 0 ] + (-1 * dW);
-          this._translation[ 1 ] = this._translation[ 1 ] + (-1 * dH);
-
           // remove the difference from x and y values
           this._x += dW;
           this._y += dH;
@@ -203,10 +203,6 @@ module.exports = class {
 
           dW = (this._width - this._oldWidth) / 2;
           dH = (this._height - this._oldHeight) / 2;
-
-          // adds the difference to recenter box
-          this._translation[ 0 ] = this._translation[ 0 ] + dW;
-          this._translation[ 1 ] = this._translation[ 1 ] + (-1 * dH);
 
           // remove the difference from x and y values
           this._x -= dW;
@@ -220,9 +216,6 @@ module.exports = class {
           dW = (this._width - this._oldWidth) / 2;
           dH = (this._height - this._oldHeight) / 2;
 
-          this._translation[ 0 ] = this._translation[ 0 ] + (-1 * dW);
-          this._translation[ 1 ] = this._translation[ 1 ] + dH;
-
           // remove the difference from x and y values
           this._x += dW;
           this._y -= dH;
@@ -233,9 +226,6 @@ module.exports = class {
 
           dW = (this._width - this._oldWidth) / 2;
           dH = (this._height - this._oldHeight) / 2;
-
-          this._translation[ 0 ] = this._translation[ 0 ] + dW;
-          this._translation[ 1 ] = this._translation[ 1 ] + dH;
 
           // remove the difference from x and y values
           this._x -= dW;
@@ -251,10 +241,9 @@ module.exports = class {
     }
 
     if ( this._isImageSelected ) {
-      this._isMoving = true;
       this._translation = [ this._clientX, this._clientY ];
-      this._x = translateClientX * Math.cos(-this._r) - translateClientY * Math.sin(-this._r) - (this._width / 2);
-      this._y = translateClientX * Math.sin(-this._r) + translateClientY * Math.cos(-this._r) - (this._height / 2);
+      this._x = translatedX - (this._width / 2);
+      this._y = translatedY - (this._height / 2);
       this._right = this._x + this._width;
       this._bottom = this._y + this._height;
     }
@@ -274,10 +263,10 @@ module.exports = class {
       bg.src = fileReader.result;
     });
 
-    fileReader.readAsDataURL(files[0]);
+    fileReader.readAsDataURL(files[ 0 ]);
   }
 
-  onSaveClick(){
+  onSaveClick() {
     this._showAnchors = false;
     setTimeout(() => {
       const linkElement = document.createElement('a');
@@ -292,3 +281,14 @@ module.exports = class {
     }, 20);
   }
 };
+
+function getRotatedCoordinates(event, offsetLeft, offsetTop, translationX, translationY, r) {
+  const clientX = event.clientX - offsetLeft;
+  const clientY = event.clientY - offsetTop;
+  const translateClientX = clientX - translationX;
+  const translateClientY = clientY - translationY;
+  return {
+    translatedX: translateClientX * Math.cos(-r) - translateClientY * Math.sin(-r),
+    translatedY: translateClientX * Math.sin(-r) + translateClientY * Math.cos(-r)
+  };
+}
